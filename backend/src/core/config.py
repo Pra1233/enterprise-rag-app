@@ -44,6 +44,7 @@ class Settings(BaseSettings):
 
     # --- Qdrant ---
     qdrant_url: str = "http://localhost:6333"
+    qdrant_api_key: str | None = None
     qdrant_collection: str = "enterprise_rag_chunks"
     qdrant_timeout_seconds: float = 10.0
 

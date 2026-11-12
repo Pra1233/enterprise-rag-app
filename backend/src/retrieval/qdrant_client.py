@@ -37,7 +37,7 @@ FILTERABLE_PAYLOAD_FIELDS = ("tenant_id", "document_id", "document_type", "autho
 def get_qdrant_client() -> QdrantClient:
     """Cached, process-wide Qdrant client."""
     settings = get_settings()
-    return QdrantClient(url=settings.qdrant_url)
+    return QdrantClient(url=settings.qdrant_url, api_key=settings.qdrant_api_key)
 
 
 def setup_collection() -> None:
