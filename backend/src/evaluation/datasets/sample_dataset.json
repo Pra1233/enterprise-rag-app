@@ -1,0 +1,107 @@
+{
+  "name": "sample_dataset",
+  "description": "Illustrative evaluation set for a fictional company's document knowledge base. These are STRUCTURAL EXAMPLES — the document IDs below are placeholders and will only produce meaningful (non-zero) retrieval scores once documents with matching IDs and content have actually been ingested into the target tenant. Do not treat a run against this dataset as a real evaluation result unless the referenced documents genuinely exist.",
+  "version": "1.0.0",
+  "cases": [
+    {
+      "case_id": "revenue-fy2025",
+      "question": "What is the company's annual revenue?",
+      "ground_truth": "The company's annual revenue is 25 crore.",
+      "ground_truth_contexts": ["Annual revenue for FY2025 was 25 crore."],
+      "expected_document_ids": ["document-001"],
+      "expected_source_references": ["Annual Report FY2025, p.3"],
+      "metadata": { "document_type": "financial_report" }
+    },
+    {
+      "case_id": "revenue-growth-yoy",
+      "question": "How much did revenue grow compared to the previous year?",
+      "ground_truth": "Revenue grew by 18% year-over-year.",
+      "ground_truth_contexts": ["Year-over-year revenue growth was 18%, up from 20 crore in FY2024."],
+      "expected_document_ids": ["document-001"],
+      "expected_source_references": ["Annual Report FY2025, p.4"],
+      "metadata": { "document_type": "financial_report" }
+    },
+    {
+      "case_id": "ceo-name",
+      "question": "Who is the current CEO of the company?",
+      "ground_truth": "The current CEO is Priya Sharma.",
+      "ground_truth_contexts": ["Priya Sharma has served as CEO since January 2023."],
+      "expected_document_ids": ["document-002"],
+      "expected_source_references": ["Annual Report FY2025, p.1"],
+      "metadata": { "document_type": "financial_report" }
+    },
+    {
+      "case_id": "parental-leave-policy",
+      "question": "How many weeks of paid parental leave does the company offer?",
+      "ground_truth": "The company offers 16 weeks of paid parental leave.",
+      "ground_truth_contexts": ["Eligible employees receive 16 weeks of fully paid parental leave."],
+      "expected_document_ids": ["document-003"],
+      "expected_source_references": ["Employee Handbook, Section 5.2"],
+      "metadata": { "document_type": "hr_policy" }
+    },
+    {
+      "case_id": "remote-work-policy",
+      "question": "Is remote work allowed, and how many days per week?",
+      "ground_truth": "Employees may work remotely up to 3 days per week with manager approval.",
+      "ground_truth_contexts": ["Remote work is permitted for up to 3 days per week, subject to manager approval."],
+      "expected_document_ids": ["document-003"],
+      "expected_source_references": ["Employee Handbook, Section 2.1"],
+      "metadata": { "document_type": "hr_policy" }
+    },
+    {
+      "case_id": "product-battery-life",
+      "question": "What is the battery life of the flagship product?",
+      "ground_truth": "The flagship product has a battery life of 14 hours under normal use.",
+      "ground_truth_contexts": ["Under typical usage conditions, the device delivers 14 hours of battery life."],
+      "expected_document_ids": ["document-004"],
+      "expected_source_references": ["Product Specification Sheet, p.2"],
+      "metadata": { "document_type": "product_spec" }
+    },
+    {
+      "case_id": "product-warranty",
+      "question": "What warranty period is offered on the flagship product?",
+      "ground_truth": "The flagship product comes with a 2-year limited warranty.",
+      "ground_truth_contexts": ["All units are covered by a 2-year limited manufacturer's warranty."],
+      "expected_document_ids": ["document-004"],
+      "expected_source_references": ["Product Specification Sheet, p.5"],
+      "metadata": { "document_type": "product_spec" }
+    },
+    {
+      "case_id": "headcount",
+      "question": "How many employees does the company have?",
+      "ground_truth": "The company has approximately 450 employees.",
+      "ground_truth_contexts": ["As of the end of FY2025, the company employed approximately 450 people worldwide."],
+      "expected_document_ids": ["document-001"],
+      "expected_source_references": ["Annual Report FY2025, p.6"],
+      "metadata": { "document_type": "financial_report" }
+    },
+    {
+      "case_id": "sick-leave-days",
+      "question": "How many paid sick leave days are employees entitled to per year?",
+      "ground_truth": "Employees are entitled to 12 paid sick leave days per year.",
+      "ground_truth_contexts": ["Full-time employees accrue 12 paid sick days annually."],
+      "expected_document_ids": ["document-003"],
+      "expected_source_references": ["Employee Handbook, Section 5.4"],
+      "metadata": { "document_type": "hr_policy" }
+    },
+    {
+      "case_id": "product-water-resistance",
+      "question": "What is the water resistance rating of the flagship product?",
+      "ground_truth": "The flagship product has an IP68 water resistance rating.",
+      "ground_truth_contexts": ["The device is rated IP68 for dust and water resistance."],
+      "expected_document_ids": ["document-004"],
+      "expected_source_references": ["Product Specification Sheet, p.3"],
+      "metadata": { "document_type": "product_spec" }
+    },
+    {
+      "case_id": "refusal-competitor-revenue",
+      "question": "What was our main competitor's revenue last year?",
+      "ground_truth": "This information is not available in the company's internal documents; the system should decline to answer rather than guess.",
+      "ground_truth_contexts": [],
+      "expected_document_ids": [],
+      "expected_source_references": [],
+      "metadata": {},
+      "expects_refusal": true
+    }
+  ]
+}

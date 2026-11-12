@@ -1,0 +1,138 @@
+# Local development stack: hot-reloading backend, Vite dev server, all infra
+# ports exposed for convenient local debugging (psql, redis-cli, etc.). Run
+# from the repository root:
+#   docker compose -f deployment/compose/docker-compose.dev.yml --env-file .env.development up
+
+name: rag-dev
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-rag_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-rag_password}
+      POSTGRES_DB: ${POSTGRES_DB:-rag_db}
+    ports:
+      - "5432:5432" # exposed for local psql/DB GUI access — dev only
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+    networks: [dev_net]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-rag_user} -d ${POSTGRES_DB:-rag_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7.4-alpine
+    ports:
+      - "6379:6379" # exposed for local redis-cli — dev only
+    volumes:
+      - redis_dev_data:/data
+    networks: [dev_net]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  qdrant:
+    image: qdrant/qdrant:v1.12.4
+    ports:
+      - "6333:6333" # REST API — dev only
+      - "6334:6334" # gRPC
+    volumes:
+      - qdrant_dev_data:/qdrant/storage
+    networks: [dev_net]
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/6333' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  minio:
+    # minio/minio was pulled from Docker Hub (and quay.io) on 2025-10-23 when
+    # MinIO stopped publishing free community-edition images; using
+    # Chainguard's free rebuild instead (same MinIO server, "latest" is the
+    # only tag they publish).
+    image: cgr.dev/chainguard/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    ports:
+      - "9000:9000" # API
+      - "9001:9001" # console — fine to expose locally; never do this in prod
+    volumes:
+      - minio_dev_data:/data
+    networks: [dev_net]
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ../../backend
+      dockerfile: ../deployment/docker/backend.Dockerfile
+    image: rag-backend:dev
+    # Overrides the image's baked-in ENTRYPOINT+CMD; tini is still PID 1 via
+    # the image's ENTRYPOINT, this just swaps the command tini execs.
+    command: ["uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    env_file: ../../.env.development
+    ports:
+      - "8000:8000"
+    volumes:
+      # Bind-mounted OVER the image's baked-in /app/src (same path) for live
+      # reload on source edits — the whole point of the dev compose file.
+      - ../../backend/src:/app/src
+      - ../../backend/alembic:/app/alembic
+    networks: [dev_net]
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      qdrant: { condition: service_healthy }
+      minio: { condition: service_healthy }
+
+  worker:
+    build:
+      context: ../../backend
+      dockerfile: ../deployment/docker/backend.Dockerfile
+    image: rag-backend:dev
+    command: ["celery", "-A", "src.ingestion.worker.celery_app", "worker", "--loglevel=debug", "--concurrency=1"]
+    env_file: ../../.env.development
+    volumes:
+      - ../../backend/src:/app/src
+    networks: [dev_net]
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      qdrant: { condition: service_healthy }
+      minio: { condition: service_healthy }
+
+  frontend:
+    image: node:22-alpine
+    working_dir: /app
+    command: sh -c "npm ci && npm run dev -- --host 0.0.0.0"
+    environment:
+      VITE_API_BASE_URL: http://localhost:8000/api/v1
+    ports:
+      - "5173:5173"
+    volumes:
+      - ../../frontend:/app
+      - frontend_node_modules:/app/node_modules # avoid overwriting container's node_modules with the host's (OS/arch mismatch)
+    networks: [dev_net]
+    depends_on:
+      - backend
+
+networks:
+  dev_net:
+
+volumes:
+  postgres_dev_data:
+  redis_dev_data:
+  qdrant_dev_data:
+  minio_dev_data:
+  frontend_node_modules:

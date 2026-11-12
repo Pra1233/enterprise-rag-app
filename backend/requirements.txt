@@ -1,0 +1,72 @@
+# --- Web framework ---
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+python-multipart==0.0.20
+
+# --- LLM orchestration (Groq + LangChain + LangGraph) ---
+# Bumped from 0.3.29 -> 0.3.63: required by ragas==0.2.15 (Phase 6). Verified
+# still within langchain-groq's declared range (<0.4.0,>=0.3.29) and the full
+# Phase 4 pytest suite (19 tests) still passes unchanged after the bump.
+langchain-core==0.3.63
+langchain-groq==0.2.3
+groq==0.37.1  # pinned explicitly: src/retrieval/graph.py imports groq.APITimeoutError directly
+langchain-community==0.3.14
+langchain-text-splitters==0.3.4
+langgraph==0.2.62
+transformers==4.47.1
+
+# --- Observability ---
+langsmith==0.2.10
+
+# --- Vector DB ---
+qdrant-client==1.12.1
+
+# --- Async task queue ---
+celery==5.4.0
+redis==6.4.0  # kombu (Celery's broker transport) requires redis-py>=6.1.0; caught by actually running the worker
+
+# --- Data validation / settings ---
+pydantic==2.10.4
+pydantic-settings==2.7.1
+
+# --- Document parsing ---
+pymupdf==1.25.1
+pdfplumber==0.11.4
+
+# --- Embeddings / reranking ---
+sentence-transformers==3.3.1
+FlagEmbedding==1.3.4
+
+# --- Relational DB ---
+sqlalchemy==2.0.36
+alembic==1.14.0
+psycopg2-binary==2.9.10
+
+# --- Object storage ---
+minio==7.2.13
+
+# --- Auth ---
+pyjwt==2.10.1
+
+# --- Password hashing ---
+argon2-cffi==23.1.0
+
+# --- Config ---
+python-dotenv==1.0.1
+
+# --- Testing ---
+pytest==8.3.4
+pytest-asyncio==0.25.2
+httpx==0.28.1
+
+# --- Evaluation (Phase 6) ---
+ragas==0.2.15
+pandas==3.1.1
+matplotlib==3.11.2
+# Transitive deps ragas pulls in; pinned explicitly so builds are reproducible.
+# langchain_openai is only imported internally by ragas's package metadata —
+# we wrap our existing ChatGroq/HuggingFaceEmbeddings via ragas's generic
+# LangchainLLMWrapper/LangchainEmbeddingsWrapper, never OpenAI itself.
+langchain_openai==0.3.19
+openai==1.109.1
+tiktoken==0.14.0

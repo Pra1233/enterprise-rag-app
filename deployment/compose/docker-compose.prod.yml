@@ -1,0 +1,227 @@
+# Production stack. Run from the repository root:
+#   docker compose -f deployment/compose/docker-compose.prod.yml --env-file .env up -d
+#
+# No backing service (postgres/redis/qdrant/minio) publishes a host port —
+# they're reachable only from other containers on `backend_net`, by service
+# name. The only public ports are 80/443 on the `frontend` (nginx) service.
+
+name: rag-prod
+
+x-backend-image: &backend-image
+  build:
+    context: ../../backend
+    dockerfile: ../deployment/docker/backend.Dockerfile
+  image: rag-backend:${IMAGE_TAG:-latest}
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:-rag_db}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks: [backend_net]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB:-rag_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits: { cpus: "1.0", memory: 1g }
+        reservations: { memory: 256m }
+
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    # appendonly: Celery broker/result data survives a restart. maxmemory +
+    # allkeys-lru: the chat response cache (src/core/cache.py) is allowed to
+    # evict under memory pressure rather than OOM-killing the container —
+    # cache data is disposable, broker data (persisted via AOF) is not.
+    command: >
+      redis-server --appendonly yes --appendfsync everysec
+      --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    networks: [backend_net]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits: { cpus: "0.5", memory: 384m }
+        reservations: { memory: 128m }
+
+  qdrant:
+    image: qdrant/qdrant:v1.12.4
+    restart: unless-stopped
+    volumes:
+      - qdrant_data:/qdrant/storage
+    networks: [backend_net]
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/6333' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    deploy:
+      resources:
+        limits: { cpus: "1.0", memory: 1g }
+        reservations: { memory: 256m }
+
+  minio:
+    image: minio/minio:RELEASE.2024-12-18T13-15-44Z
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER is required}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
+    volumes:
+      - minio_data:/data
+    networks: [backend_net]
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits: { cpus: "0.5", memory: 512m }
+        reservations: { memory: 128m }
+    # MinIO's own web console (port 9001) is deliberately never published to
+    # the host here — same reasoning as Postgres/Redis/Qdrant above.
+
+  # One-off migration job: NOT part of the default `up`. Run explicitly
+  # before (re)starting backend/worker on a new release:
+  #   docker compose -f docker-compose.prod.yml --env-file ../../.env run --rm migrate
+  migrate:
+    <<: *backend-image
+    env_file: ../../.env
+    entrypoint: ["/usr/bin/tini", "--"]
+    command: ["alembic", "upgrade", "head"]
+    networks: [backend_net]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    profiles: ["migrate"]
+
+  backend:
+    <<: *backend-image
+    restart: unless-stopped
+    env_file: ../../.env
+    networks: [backend_net, frontend_net]
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      qdrant: { condition: service_healthy }
+      minio: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    deploy:
+      resources:
+        limits: { cpus: "2.0", memory: 3g }
+        reservations: { memory: 1g }
+
+  worker:
+    <<: *backend-image
+    restart: unless-stopped
+    env_file: ../../.env
+    environment:
+      # Celery concurrency and task time limits, configurable without an
+      # image rebuild. soft/hard limits: a task gets SIGTERM at the soft
+      # limit (clean cancellation) and SIGKILL at the hard limit if it
+      # doesn't exit — prevents one stuck ingestion job from hanging a worker
+      # forever.
+      CELERY_CONCURRENCY: ${CELERY_CONCURRENCY:-2}
+      CELERY_TASK_SOFT_TIME_LIMIT: ${CELERY_TASK_SOFT_TIME_LIMIT:-240}
+      CELERY_TASK_TIME_LIMIT: ${CELERY_TASK_TIME_LIMIT:-300}
+    entrypoint: ["/usr/bin/tini", "--"]
+    command: >
+      celery -A src.ingestion.worker.celery_app worker
+      --loglevel=info
+      --concurrency=${CELERY_CONCURRENCY:-2}
+      --queues=ingestion
+      --max-tasks-per-child=50
+    networks: [backend_net]
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      qdrant: { condition: service_healthy }
+      minio: { condition: service_healthy }
+    # Celery's own graceful shutdown: SIGTERM asks the worker to stop taking
+    # new tasks and finish in-flight ones (warm shutdown); give it real time
+    # to do that before Compose sends SIGKILL.
+    stop_signal: SIGTERM
+    stop_grace_period: 30s
+    deploy:
+      resources:
+        limits: { cpus: "2.0", memory: 3g }
+        reservations: { memory: 1g }
+
+  frontend:
+    build:
+      context: ../..
+      dockerfile: deployment/docker/frontend.Dockerfile
+    image: rag-frontend:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      API_BASE_URL: ${PUBLIC_API_BASE_URL:-/api/v1}
+    ports:
+      - "${HTTP_PORT:-80}:80"
+    networks: [frontend_net]
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx
+      - /var/run
+      - /tmp
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    security_opt: ["no-new-privileges:true"]
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://localhost/env-config.js"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits: { cpus: "0.5", memory: 128m }
+        reservations: { memory: 32m }
+
+networks:
+  # backend_net: postgres/redis/qdrant/minio/backend/worker — never published
+  # to the host; reachable only by service name from within this network.
+  backend_net:
+  # frontend_net: nginx <-> backend only, so nginx can proxy_pass /api/ to
+  # `backend` without also being able to reach postgres/redis/qdrant/minio.
+  frontend_net:
+
+volumes:
+  postgres_data:
+  redis_data:
+  qdrant_data:
+  minio_data:

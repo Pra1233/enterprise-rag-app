@@ -1,0 +1,40 @@
+# Real env files — never commit these. Only the *.example templates are tracked.
+.env
+.env.development
+.env.production
+.env.local
+.env.*.local
+
+# Backup artifacts (see deployment/scripts/backup.sh)
+backups/
+*.dump
+*.sql.gz
+
+# Evaluation run output (Phase 6)
+backend/evaluation_results/
+
+# OS / editor cruft
+.DS_Store
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+backend/.venv/
+backend/venv/
+
+# Node / frontend
+node_modules/
+frontend/dist/
+frontend/coverage/
+*.local
+
+# Misc
+*.log
+.claude/
+

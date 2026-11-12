@@ -1,0 +1,27 @@
+# Never baked into the image — these either don't belong in production,
+# contain local-only state, or (crucially) may hold secrets.
+.env
+.env.*
+!.env.example
+
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+.git/
+.gitignore
+.dockerignore
+
+tests/
+evaluation_results/
+*.db
+*.sqlite3
+
+.vscode/
+.idea/
+*.log

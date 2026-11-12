@@ -1,0 +1,158 @@
+name: Deploy
+
+on:
+  # Fires only after CI has finished on main — "do not deploy if required CI
+  # checks fail" is enforced by this condition in the `build-and-push` job.
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+  # Manual trigger, also used for ROLLBACK: pass a previously-pushed
+  # image_tag (a commit SHA shown in an earlier successful run of this
+  # workflow) to redeploy that exact image without rebuilding anything.
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Image tag to deploy (commit SHA). Leave empty to build+deploy the current main."
+        required: false
+        type: string
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  BACKEND_IMAGE: ${{ github.repository }}-backend
+  FRONTEND_IMAGE: ${{ github.repository }}-frontend
+
+jobs:
+  build-and-push:
+    name: Build and push images
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success')
+    outputs:
+      image_tag: ${{ steps.tag.outputs.value }}
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Resolve image tag
+        id: tag
+        run: |
+          if [ -n "${{ inputs.image_tag }}" ]; then
+            echo "value=${{ inputs.image_tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Rollback path: the requested tag must already exist in GHCR — skip
+      # rebuilding entirely and just let the `deploy` job pull it.
+      - name: Check if this is a rollback to an existing tag
+        id: rollback_check
+        if: inputs.image_tag != ''
+        run: echo "is_rollback=true" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+        if: steps.rollback_check.outputs.is_rollback != 'true'
+
+      - name: Log in to GHCR
+        if: steps.rollback_check.outputs.is_rollback != 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          # GITHUB_TOKEN is minted per-run and auto-redacted from logs — no
+          # separate registry secret to manage or leak.
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push backend
+        if: steps.rollback_check.outputs.is_rollback != 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: backend
+          file: deployment/docker/backend.Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}:${{ steps.tag.outputs.value }}
+            ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push frontend
+        if: steps.rollback_check.outputs.is_rollback != 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deployment/docker/frontend.Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}:${{ steps.tag.outputs.value }}
+            ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    name: Deploy to server
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    environment: production # requires a manual approver if configured under Settings > Environments
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            set -euo pipefail
+            cd "${{ secrets.DEPLOY_PATH }}"
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+            export IMAGE_TAG="${{ needs.build-and-push.outputs.image_tag }}"
+            sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=${IMAGE_TAG}/" .env
+            docker compose -f deployment/compose/docker-compose.prod.yml --env-file .env pull backend worker frontend
+            docker compose -f deployment/compose/docker-compose.prod.yml --env-file .env run --rm migrate
+            docker compose -f deployment/compose/docker-compose.prod.yml --env-file .env up -d --remove-orphans
+
+      - name: Wait for health check
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            set -euo pipefail
+            for i in $(seq 1 30); do
+              if curl -fsS http://localhost/health > /dev/null; then
+                echo "Healthy after ${i} attempt(s)."
+                exit 0
+              fi
+              sleep 2
+            done
+            echo "Service did not become healthy within 60s." >&2
+            exit 1
+
+      - name: Deployment summary
+        if: always()
+        run: |
+          STATUS="${{ job.status }}"
+          {
+            echo "## Deployment ${STATUS}"
+            echo ""
+            echo "- Image tag: \`${{ needs.build-and-push.outputs.image_tag }}\`"
+            echo "- Triggered by: ${{ github.event_name }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # If `deploy` fails, the previous release's images are still tagged in
+  # GHCR (every build is pushed with its commit SHA, never only `latest`) —
+  # roll back by re-running this workflow via workflow_dispatch with
+  # `image_tag` set to the last known-good SHA. That skips the build step
+  # entirely and redeploys the existing image.

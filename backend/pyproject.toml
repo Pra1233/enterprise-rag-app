@@ -1,0 +1,11 @@
+[tool.ruff]
+line-length = 120
+target-version = "py313"
+extend-exclude = ["alembic/versions"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+# B008: FastAPI's DI pattern (`file: UploadFile = File(...)`) is the documented,
+# idiomatic way to declare upload/form parameters — not the bug this rule
+# normally catches (a mutable default evaluated once at import time).
+ignore = ["B008"]
