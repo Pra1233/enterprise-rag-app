@@ -1,0 +1,83 @@
+services:
+  # Render's free tier only covers Web Services (a Background Worker needs a
+  # paid plan, ~$6-7/mo minimum) — so the Celery worker runs *inside* this
+  # same container, backgrounded via `&`, alongside uvicorn. Fine for a
+  # portfolio-scale demo; the tradeoff is that a worker crash only recovers
+  # when the whole container restarts, and both processes share one
+  # free-tier instance's RAM/CPU.
+  - type: web
+    name: enterprise-rag-api
+    runtime: docker
+    dockerfilePath: ./deployment/docker/backend.Dockerfile
+    dockerContext: ./backend
+    dockerCommand: >-
+      sh -c "celery -A src.ingestion.worker.celery_app worker --loglevel=info --concurrency=1 &
+      uvicorn src.api.main:app --host 0.0.0.0 --port 8000"
+    plan: free
+    region: ohio
+    healthCheckPath: /health
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: LOG_LEVEL
+        value: INFO
+      - key: API_PREFIX
+        value: /api/v1
+      - key: PORT
+        value: "8000"
+      - key: JWT_ALGORITHM
+        value: HS256
+      - key: JWT_EXPIRY_HOURS
+        value: "24"
+      - key: GROQ_MODEL
+        value: openai/gpt-oss-120b
+      - key: EMBEDDING_MODEL
+        value: BAAI/bge-small-en-v1.5
+      - key: RERANKER_MODEL
+        value: BAAI/bge-reranker-base
+      - key: EMBEDDING_DEVICE
+        value: cpu
+      - key: QDRANT_COLLECTION
+        value: enterprise_rag_chunks
+      - key: MINIO_BUCKET
+        value: rag-chatbot12
+      - key: MINIO_SECURE
+        value: "true"
+      - key: CACHE_ENABLED
+        value: "true"
+      - key: CACHE_TTL
+        value: "86400"
+      - key: LANGSMITH_TRACING
+        value: "false"
+      - key: EVALUATION_ENABLED
+        value: "true"
+      - key: EVALUATION_DATASET_PATH
+        value: src/evaluation/datasets/sample_dataset.json
+      - key: EVALUATION_TOP_K
+        value: "5"
+      - key: EVALUATION_MAX_CONCURRENCY
+        value: "2"
+      - key: METRICS_ENABLED
+        value: "true"
+      # Secrets and deployment-specific values — set these manually in the
+      # Render dashboard after the service is created (never committed here).
+      - key: FRONTEND_URL
+        sync: false
+      - key: JWT_SECRET_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: POSTGRES_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: QDRANT_URL
+        sync: false
+      - key: QDRANT_API_KEY
+        sync: false
+      - key: MINIO_ENDPOINT
+        sync: false
+      - key: MINIO_ACCESS_KEY
+        sync: false
+      - key: MINIO_SECRET_KEY
+        sync: false
