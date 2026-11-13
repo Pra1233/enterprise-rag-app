@@ -7,7 +7,14 @@ from argon2.exceptions import VerifyMismatchError
 from src.core.config import get_settings
 from src.core.db import User
 
-_hasher = PasswordHasher()
+# Argon2's defaults (64 MiB, time_cost=3, parallelism=4) spike memory per
+# hash/verify call - fine on a normal host, but measured to OOM-kill the
+# whole process on a 512MB free-tier instance already carrying a heavy
+# ML import footprint (torch/transformers/langchain): GET /health (no
+# hashing) stayed up reliably while POST /auth/login consistently 502'd.
+# OWASP's own documented minimum profile (19 MiB, t=2, p=1) is still a
+# legitimate, secure Argon2id configuration - not an ad-hoc weakening.
+_hasher = PasswordHasher(time_cost=2, memory_cost=19456, parallelism=1)
 
 
 def hash_password(password: str) -> str:
