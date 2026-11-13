@@ -13,6 +13,10 @@ export const ingestionApi = {
 
     const { data } = await apiClient.post<UploadResponse>('/ingestion/upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
+      // Longer than the global default: on a free-tier deploy with no
+      // background worker (CELERY_TASK_ALWAYS_EAGER=true), this request
+      // blocks until ingestion actually finishes, not just until it's queued.
+      timeout: 120_000,
       onUploadProgress: (event) => {
         if (onProgress && event.total) {
           onProgress(Math.round((event.loaded / event.total) * 100))

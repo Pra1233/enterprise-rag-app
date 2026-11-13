@@ -53,6 +53,11 @@ class Settings(BaseSettings):
 
     # --- Redis / Celery ---
     redis_url: str = "redis://localhost:6379/0"
+    # Runs ingestion synchronously in the request instead of via a separate
+    # worker process — for free-tier hosts with no background-worker option
+    # (e.g. Render's free plan), where running a second heavy Python process
+    # alongside uvicorn exceeds the instance's memory/startup-time budget.
+    celery_task_always_eager: bool = False
 
     # --- MinIO (S3-compatible object storage for original documents) ---
     minio_endpoint: str = "localhost:9000"

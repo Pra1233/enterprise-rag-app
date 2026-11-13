@@ -78,8 +78,6 @@ WORKDIR /app
 COPY --chown=appuser:appuser src/ ./src/
 COPY --chown=appuser:appuser alembic.ini ./alembic.ini
 COPY --chown=appuser:appuser alembic/ ./alembic/
-COPY --chown=appuser:appuser start-web-and-worker.sh ./start-web-and-worker.sh
-RUN chmod +x ./start-web-and-worker.sh
 
 USER appuser
 

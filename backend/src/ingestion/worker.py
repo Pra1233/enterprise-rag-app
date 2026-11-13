@@ -28,4 +28,6 @@ celery_app.conf.update(
     task_routes={
         "ingestion.ingest_document_task": {"queue": "ingestion"},
     },
+    task_always_eager=settings.celery_task_always_eager,
+    task_eager_propagates=True,
 )

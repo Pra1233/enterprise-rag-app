@@ -1,16 +1,19 @@
 services:
   # Render's free tier only covers Web Services (a Background Worker needs a
-  # paid plan, ~$6-7/mo minimum) — so the Celery worker runs *inside* this
-  # same container, backgrounded via `&`, alongside uvicorn. Fine for a
-  # portfolio-scale demo; the tradeoff is that a worker crash only recovers
-  # when the whole container restarts, and both processes share one
-  # free-tier instance's RAM/CPU.
+  # paid plan, ~$6-7/mo minimum). Running the Celery worker as a second
+  # process *inside* this container (backgrounded alongside uvicorn) was
+  # tried and measured against the real free-tier instance: two heavy
+  # Python processes (torch/transformers/langchain each) exceeded the
+  # 512MB free instance's memory/startup-time budget and never bound a
+  # port within Render's scan window. Ingestion instead runs synchronously
+  # in the request via Celery's eager mode (CELERY_TASK_ALWAYS_EAGER below)
+  # - no second process, no broker round-trip, just a slower upload
+  # response. Local dev keeps the real async Celery+Redis pipeline.
   - type: web
     name: enterprise-rag-api
     runtime: docker
     dockerfilePath: ./deployment/docker/backend.Dockerfile
     dockerContext: ./backend
-    dockerCommand: ./start-web-and-worker.sh
     plan: free
     region: ohio
     healthCheckPath: /health
@@ -23,6 +26,8 @@ services:
         value: /api/v1
       - key: PORT
         value: "8000"
+      - key: CELERY_TASK_ALWAYS_EAGER
+        value: "true"
       - key: JWT_ALGORITHM
         value: HS256
       - key: JWT_EXPIRY_HOURS
