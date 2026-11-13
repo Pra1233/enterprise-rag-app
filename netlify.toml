@@ -1,6 +1,12 @@
 [build]
   base = "frontend"
-  command = "npm run build"
+  # public/env-config.js is checked in with a localhost dev default, meant
+  # to be overwritten at container startup by the Docker entrypoint's
+  # envsubst (see deployment/docker/frontend.Dockerfile) - Netlify has no
+  # such entrypoint, so without this it silently wins over the correct
+  # build-time value below (src/config.ts checks window.__ENV__ FIRST).
+  # Regenerate it here, the same way, before Vite copies public/ into dist/.
+  command = "echo \"window.__ENV__ = { VITE_API_BASE_URL: '$VITE_API_BASE_URL' };\" > public/env-config.js && npm run build"
   publish = "dist"
 
 [build.environment]
