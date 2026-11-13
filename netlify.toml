@@ -1,0 +1,18 @@
+[build]
+  base = "frontend"
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  # No Docker entrypoint on Netlify to inject window.__ENV__ at runtime (see
+  # src/config.ts) - this gets baked in at build time instead, which is fine
+  # since a static Netlify deploy only ever points at one backend anyway.
+  VITE_API_BASE_URL = "https://enterprise-rag-api-a5d5.onrender.com/api/v1"
+
+# React Router does client-side routing - a direct load/refresh of e.g.
+# /chat or /admin must still serve index.html (not a Netlify 404), so the
+# app's own router can take over.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
