@@ -10,9 +10,7 @@ services:
     runtime: docker
     dockerfilePath: ./deployment/docker/backend.Dockerfile
     dockerContext: ./backend
-    dockerCommand: >-
-      sh -c "celery -A src.ingestion.worker.celery_app worker --loglevel=info --concurrency=1 &
-      uvicorn src.api.main:app --host 0.0.0.0 --port 8000"
+    dockerCommand: ./start-web-and-worker.sh
     plan: free
     region: ohio
     healthCheckPath: /health
