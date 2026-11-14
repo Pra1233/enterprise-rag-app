@@ -2,6 +2,7 @@ import asyncio
 import os
 import tempfile
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 
 from celery.utils.log import get_task_logger
 
@@ -17,6 +18,24 @@ from src.retrieval.qdrant_client import UPSERT_BATCH_SIZE, delete_chunks_by_docu
 logger = get_task_logger(__name__)
 
 MAX_RETRIES = 3
+
+
+def _run_coroutine_sync(coro):
+    """Runs an async coroutine from sync code, whether or not the calling
+    thread already has a running event loop.
+
+    A real Celery worker process has no event loop, so `asyncio.run()` alone
+    would be fine - but with CELERY_TASK_ALWAYS_EAGER (free-tier deploys
+    with no separate worker, see src/ingestion/worker.py), this task runs
+    inline inside FastAPI's own async request handler, which already has one
+    running. Calling asyncio.run() there raises "asyncio.run() cannot be
+    called from a running event loop" on every single call - deterministic,
+    not transient, so Celery's autoretry only burns through retries hitting
+    the same error each time. A fresh thread never has a running loop, so
+    this works identically in both cases.
+    """
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        return pool.submit(asyncio.run, coro).result()
 
 
 @celery_app.task(
@@ -70,7 +89,7 @@ def ingest_document_task(self, document_id: str) -> dict:
                 tmp_path = tmp_file.name
 
             try:
-                parsed = asyncio.run(parse_pdf(tmp_path))
+                parsed = _run_coroutine_sync(parse_pdf(tmp_path))
                 # A scanned/image-only PDF parses "successfully" (no exception)
                 # but yields no text at all — without this check it would
                 # silently end up "indexed" with zero chunks and nothing ever
