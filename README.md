@@ -1,9 +1,11 @@
 # RAG Console
 
+[![CI](https://github.com/Pra1233/enterprise-rag-app/actions/workflows/ci.yml/badge.svg)](https://github.com/Pra1233/enterprise-rag-app/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 An enterprise-style Retrieval-Augmented Generation (RAG) application: upload PDFs, ask questions in natural language, and get answers grounded in your own documents with cited sources. Built with a real auth system, role-based access control, an admin panel, and per-user usage quotas — not a toy chatbot demo.
 
-**Live demo:** _add your deployed URL here_
-**Demo login:** `demo_user` / `demo123` (or use the one-click "Continue as Demo User" button)
+**Demo login:** `demo_user` / `demo123` (or use the one-click "Continue as Demo User" button on the login page)
 
 ---
 
@@ -108,22 +110,22 @@ Once running: `http://localhost:5173` (app), `http://localhost:8000/docs` (API d
 ```
 backend/
   src/
-    api/          FastAPI routes, request/response schemas, dependencies
-    core/          config, DB models, security (hashing/JWT), exceptions
-    services/       business logic (auth, admin, chat, documents, ingestion)
-    ingestion/       PDF parsing, chunking, embedding, Celery tasks
-    retrieval/       LangGraph RAG pipeline (retrieve -> rerank -> grade -> generate)
-    scripts/         one-off ops scripts (seed_users.py)
-  alembic/          database migrations
-  tests/             pytest suite
+    api/         FastAPI routes, request/response schemas, dependencies
+    core/        config, DB models, security (hashing/JWT), exceptions
+    services/    business logic (auth, admin, chat, documents, ingestion)
+    ingestion/   PDF parsing, chunking, embedding, Celery tasks
+    retrieval/   LangGraph RAG pipeline (retrieve -> rerank -> grade -> generate)
+    scripts/     one-off ops scripts (seed_users.py)
+  alembic/       database migrations
+  tests/         pytest suite
 frontend/
   src/
-    api/            axios client + per-resource API modules
-    components/       organized by feature (chat/, documents/, admin/, layout/, common/, auth/)
-    context/          AuthContext
-    hooks/            React Query hooks, useChat/useSSE for streaming
-    pages/            route-level components
-deployment/         Docker Compose files, nginx config, prod Dockerfiles
+    api/         axios client + per-resource API modules
+    components/  organized by feature (chat/, documents/, admin/, layout/, common/, auth/)
+    context/     AuthContext
+    hooks/       React Query hooks, useChat/useSSE for streaming
+    pages/       route-level components
+deployment/      Docker Compose files, nginx config, prod Dockerfiles
 ```
 
 ## License
