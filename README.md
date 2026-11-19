@@ -5,7 +5,10 @@
 
 An enterprise-style Retrieval-Augmented Generation (RAG) application: upload PDFs, ask questions in natural language, and get answers grounded in your own documents with cited sources. Built with a real auth system, role-based access control, an admin panel, and per-user usage quotas — not a toy chatbot demo.
 
+**Live demo:** https://prabhat-chatbot.netlify.app
 **Demo login:** `demo_user` / `demo123` (or use the one-click "Continue as Demo User" button on the login page)
+
+> **Note:** the live demo's backend runs on a free-tier host with 512MB RAM. Login, chat (against already-indexed documents), and the admin panel all work. New document uploads currently fail on this host — the embedding model needs more memory than the free tier provides. Everything works end-to-end when run locally (see below) or on a host with more RAM.
 
 ---
 
